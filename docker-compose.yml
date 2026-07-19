@@ -1,0 +1,81 @@
+services:
+  # 1. Laravel Web Frame Application Core
+  app:
+    build:
+      context: .
+      target: base
+    container_name: ng_web_core
+    restart: unless-stopped
+    volumes:
+      - ./src:/var/www
+      - ./php.ini:/usr/local/etc/php/conf.d/uploads.ini
+      - genomics_data:/var/www/storage/app/genomics
+    networks:
+      - ng_network
+
+  # 2. High-Performance Nginx Web Server
+  nginx:
+    image: nginx:alpine
+    container_name: ng_nginx_server
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./src:/var/www
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - genomics_data:/var/www/storage/app/genomics
+    depends_on:
+      - app
+    networks:
+      - ng_network
+
+  # 3. MySQL Relational Database
+  mysql:
+    image: mysql:8.0
+    container_name: ng_mysql_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: neuro_genomics_db
+      MYSQL_ROOT_PASSWORD: root_secret_pass
+      MYSQL_USER: neuro_user
+      MYSQL_PASSWORD: user_secret_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - ng_db_store:/var/lib/mysql
+    networks:
+      - ng_network
+
+  # 4. Redis Memory Queue Broker
+  redis:
+    image: redis:alpine
+    container_name: ng_queue_broker
+    restart: unless-stopped
+    networks:
+      - ng_network
+
+  # 5. Specialized Asynchronous Bioinformatics Pipeline Worker
+  worker:
+    build:
+      context: .
+      target: genomics_worker
+    container_name: ng_pipeline_worker
+    restart: unless-stopped
+    volumes:
+      - ./src:/var/www
+      - ./bioinformatics:/var/www/bioinformatics
+      - genomics_data:/var/www/storage/app/genomics
+    depends_on:
+      - redis
+      - mysql
+    networks:
+      - ng_network
+
+volumes:
+  genomics_data:
+  ng_db_store:
+
+networks:
+  ng_network:
+    driver: bridge
+
